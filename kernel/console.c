@@ -22,6 +22,8 @@
 #include "keyboard.h"
 #include "proto.h"
 
+#define DEBUG
+
 PRIVATE void set_cursor(unsigned int position);
 PRIVATE void set_video_start_addr(u32 addr);
 PRIVATE void flush(CONSOLE* p_con);
@@ -98,7 +100,11 @@ PUBLIC void out_char_color(CONSOLE* p_con, char ch, int color)
 		}
 		break;
 	case '\t':
-		p_con->cursor += 4;
+#ifdef DEBUG
+		*p_vmem++ = ' ';
+		*p_vmem++ = 0x66;
+#endif
+		p_con->cursor += 1;
 		break;
 	default:
 		if (p_con->cursor <
