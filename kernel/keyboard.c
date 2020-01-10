@@ -44,6 +44,7 @@ PRIVATE void    kb_ack();
  *======================================================================*/
 PUBLIC void keyboard_handler(int irq)
 {
+	//中断处理模块，将读取的扫描码放置到缓冲当中
 	u8 scan_code = in_byte(KB_DATA);
 
 	if (kb_in.count < KB_IN_BYTES) {
@@ -85,6 +86,7 @@ PUBLIC void init_keyboard()
 *======================================================================*/
 PUBLIC void keyboard_read(TTY* p_tty)
 {
+	//由终端进行调用，传入自身引用，每次从缓冲中读取一个扫描码，将对应的key给到调用者终端进行处理
 	u8	scan_code;
 	char	output[2];
 	int	make;	/* 1: make;  0: break. */
@@ -103,7 +105,7 @@ PUBLIC void keyboard_read(TTY* p_tty)
 		if (scan_code == 0xE1) {
 			int i;
 			u8 pausebrk_scode[] = {0xE1, 0x1D, 0x45,
-					       0xE1, 0x9D, 0xC5};
+					       0xE1, 0x9D, 0xC5};//pausebreak的scancode是6个
 			int is_pausebreak = 1;
 			for(i=1;i<6;i++){
 				if (get_byte_from_kbuf() != pausebrk_scode[i]) {
@@ -116,6 +118,7 @@ PUBLIC void keyboard_read(TTY* p_tty)
 			}
 		}
 		else if (scan_code == 0xE0) {
+			//开头位xEO的，根据下一个byte的内容来决定是Printcreen还是第三列的处理方式
 			scan_code = get_byte_from_kbuf();
 
 			/* PrintScreen 被按下 */
@@ -152,6 +155,7 @@ PUBLIC void keyboard_read(TTY* p_tty)
 
 			int caps = shift_l || shift_r;
 			if (caps_lock) {
+				//根据当前大小写情况（caps_lock来确定是否大写）
 				if ((keyrow[0] >= 'a') && (keyrow[0] <= 'z')){
 					caps = !caps;
 				}

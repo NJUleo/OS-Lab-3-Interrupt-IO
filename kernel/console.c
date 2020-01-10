@@ -90,6 +90,9 @@ PUBLIC void out_char(CONSOLE* p_con, char ch)
 			*(p_vmem-1) = DEFAULT_CHAR_COLOR;
 		}
 		break;
+	case '\t':
+		p_con->cursor += 4;
+		break;
 	default:
 		if (p_con->cursor <
 		    p_con->original_addr + p_con->v_mem_limit - 1) {
@@ -172,13 +175,13 @@ PUBLIC void select_console(int nr_console)	/* 0 ~ (NR_CONSOLES - 1) */
 PUBLIC void scroll_screen(CONSOLE* p_con, int direction)
 {
 	if (direction == SCR_UP) {
-		if (p_con->current_start_addr > p_con->original_addr) {
+		if (p_con->current_start_addr > p_con->original_addr) {//最小不能比控制台的在显存对应位置还小
 			p_con->current_start_addr -= SCREEN_WIDTH;
 		}
 	}
 	else if (direction == SCR_DN) {
 		if (p_con->current_start_addr + SCREEN_SIZE <
-		    p_con->original_addr + p_con->v_mem_limit) {
+		    p_con->original_addr + p_con->v_mem_limit) {//不能超出此控制台的显存位置
 			p_con->current_start_addr += SCREEN_WIDTH;
 		}
 	}
