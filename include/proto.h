@@ -45,6 +45,7 @@ PUBLIC void in_process(TTY* p_tty, u32 key);
 PUBLIC void out_char(CONSOLE* p_con, char ch);
 PUBLIC void out_char_color(CONSOLE* p_con, char ch, int color);
 PUBLIC void scroll_screen(CONSOLE* p_con, int direction);
+PUBLIC void set_str_color(CONSOLE* p_con, int to_ch, int length, int color);
 
 /* 以下是系统调用相�? */
 

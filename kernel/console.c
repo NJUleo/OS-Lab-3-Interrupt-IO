@@ -22,7 +22,7 @@
 #include "keyboard.h"
 #include "proto.h"
 
-#define DEBUG
+//#define DEBUG
 
 PRIVATE void set_cursor(unsigned int position);
 PRIVATE void set_video_start_addr(u32 addr);
@@ -75,6 +75,18 @@ PUBLIC void out_char(CONSOLE* p_con, char ch){
 	out_char_color(p_con, ch, DEFAULT_CHAR_COLOR);
 }
 
+/*
+将指定位置的指定长度个字节设置颜色
+*/
+PUBLIC void set_str_color(CONSOLE* p_con, int to_ch, int length, int color){
+	u8* p_vmem = (u8*)(V_MEM_BASE + to_ch * 2);
+	for(int i = 0; i < length; i++){
+		p_vmem++;
+		*(p_vmem++) = color;
+	}
+}
+
+
 /*======================================================================*
 			   out_char_color
 			   按照指定得颜色打印字符。对于换行和退后得情况，颜色保持原有颜色
@@ -102,7 +114,7 @@ PUBLIC void out_char_color(CONSOLE* p_con, char ch, int color)
 	case '\t':
 #ifdef DEBUG
 		*p_vmem++ = ' ';
-		*p_vmem++ = 0x66;
+		*p_vmem++ = DEFAULT_CHAR_COLOR;
 #endif
 		p_con->cursor += 1;
 		break;

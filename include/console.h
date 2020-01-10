@@ -28,4 +28,5 @@ typedef struct s_console
 #define RED_CHAR_COLOR	0x04	/* 0000 0100 黑底红字 */
 
 
+
 #endif /* _ORANGES_CONSOLE_H_ */

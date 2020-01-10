@@ -20,9 +20,12 @@
 #define TTY_END		(tty_table + NR_CONSOLES)
 #define MODE_INPUT 0
 #define MODE_SEARCH 1
+#define MODE_SHOW -1
+#define MODE_SHOWED 2
+#define MODE_UNSHOW 3
 
 
-//#define AUTO_CLEAR_TTY
+#define AUTO_CLEAR_TTY
 
 PRIVATE void init_tty(TTY* p_tty);
 PRIVATE void tty_do_read(TTY* p_tty);
@@ -30,6 +33,11 @@ PRIVATE void tty_do_write(TTY* p_tty);
 PRIVATE void put_key(TTY* p_tty, u32 key);
 PRIVATE void clear_tty(TTY* p_tty);
 PRIVATE void tty_do_handle(TTY* p_tty);
+PRIVATE void clear_tty_search(TTY* p_tty);
+PRIVATE int str_match(char* s1, char* s2);
+PRIVATE void show_match_str(TTY* p_tty);
+PRIVATE int str_size(char* str);
+
 
 //输入的和要搜索匹配的字符全部放置在这个文件当中。按道理说应该是每个终端单独存放对应的状态和缓冲，基本就是面向对象的思想，这里做个简化，既然不要求多终端就写再这个文件当中就可以了
 
@@ -42,6 +50,8 @@ PRIVATE char input_buf[80 * 25];
 PRIVATE char search_buf[80 * 25];
 //指向下一个输入字符所在的位置
 PRIVATE int char_now;
+//search mode指向下一个输入字符所在的位置
+PRIVATE int char_now_search;
 //每一行的长度，用于对换行进行统一回退
 PRIVATE int line_length[25];
 //当前正在写的行
@@ -81,7 +91,7 @@ PUBLIC void task_tty()
 #ifdef AUTO_CLEAR_TTY
 			int current_time = get_ticks();
 			if (current_mode == MODE_INPUT &&
-				((current_time - time_counter) * 1000 / HZ) > 20 * 10000)
+				((current_time - time_counter) * 1000 / HZ) > 10 * 10000)
 			{
 				clear_tty(p_tty);
 				// 重置计时器
@@ -134,6 +144,15 @@ PUBLIC void in_process(TTY* p_tty, u32 key)
 				case UP:
 					if ((key & FLAG_SHIFT_L) || (key & FLAG_SHIFT_R)) {
 						scroll_screen(p_tty->p_console, SCR_DN);
+					}
+					break;
+				case ESC:
+					switch(current_mode){
+					case MODE_INPUT:
+						current_mode = MODE_SEARCH;
+						break;
+					case MODE_SHOWED:
+						current_mode = MODE_UNSHOW;
 					}
 					break;
 				case DOWN:
@@ -207,65 +226,119 @@ PRIVATE void tty_do_handle(TTY* p_tty){
 
 		//下一此应该写的位置,用于baspace
 		int char_now_next = 0;
-
-		switch(ch){
-		case '\n':
-			line_now++;
-			char_now = line_now * 80;
-			break;
-		case '\b':
-			//如果要更换行，则删除到上一行的结束位置。如果是\t,删除四个
+		int char_now_next_search = 0;
 
 
-			if(line_now * 80 == char_now){
-				//下一个要写的字符恰好是当前行的第一个字符，说明向上一行
-				line_now--;
-				line_now = (line_now < 0) ? 0 : line_now;
-				char_now = line_now * 80 + line_length[line_now];
-				if(line_length[line_now] == 80){
-					//上一行是满的
+		switch(current_mode){
+		case MODE_INPUT:
+			switch(ch){
+			case '\n':
+				line_now++;
+				char_now = line_now * 80;
+				break;
+			case '\b':
+				//如果要更换行，则删除到上一行的结束位置。如果是\t,删除四个
+
+
+				if(line_now * 80 == char_now){
+					//下一个要写的字符恰好是当前行的第一个字符，说明向上一行
+					line_now--;
+					line_now = (line_now < 0) ? 0 : line_now;
+					char_now = line_now * 80 + line_length[line_now];
+					if(line_length[line_now] == 80){
+						//上一行是满的
+						char_now--;
+						input_buf[char_now] = '\0';
+					}
+					break;
+				}else if(input_buf[char_now - 1] == '\t'){
+					//tab
+					char_now_next = char_now - 4;
+				}else{
+					//普通字符且不需要换行
+					char_now_next = char_now - 1;
+				}
+
+				//防止越界
+				char_now_next = (char_now_next < 0) ? 0 : char_now_next;
+				while(char_now > char_now_next){
 					char_now--;
+					line_length[line_now] -= 1;
 					input_buf[char_now] = '\0';
 				}
 				break;
-			}else if(input_buf[char_now - 1] == '\t'){
-				//tab
-				char_now_next = char_now - 4;
-			}else{
-				//普通字符且不需要换行
-				char_now_next = char_now - 1;
+			case '\t':
+			//tab会在其中键入四个\t，这里暂时不考虑在其中换行的情况
+				input_buf[char_now + 3] = input_buf[char_now + 2] = input_buf[char_now + 1] = input_buf[char_now] = ch;
+				char_now += 4;
+				line_length[line_now] += 4;
+				// if((line_now + 1) * 80 < char_now){
+				// 	//下次要写的字符的位置位于下一行
+				// 	line_now++;
+				// 	// line_length[line_now] += 1;
+				// }
+				break;
+			case 27:
+			//切换输入状态
+				out_char(p_tty->p_console, 'B');
+				current_mode = MODE_SEARCH;
+				break;
+			default:
+			//普通字符
+				input_buf[char_now] = ch;
+				char_now++;
+				line_length[line_now] += 1;
+				if((line_now + 1) * 80 < char_now){
+					//下次要写的字符的位置位于下一行
+					line_now++;
+				}
+				break;
 			}
+			break;
+		case MODE_SHOW:
+			//除非esc否则不会发生改变
+			break;
+		case MODE_SEARCH:
+		//和input基本一致，区别是将内容写在search_buf，没有行的概念
+			switch(ch){
+			case '\n':
+				current_mode = MODE_SHOW;
+				break;
+			case '\b':
+				//如果是\t,删除四个
+				if(search_buf[char_now_search - 1] == '\t'){
+					//tab
+					char_now_next_search = char_now_search - 4;
+				}else{
+					//普通字符且不需要换行
+					char_now_next_search = char_now_search - 1;
+				}
 
-			//防止越界
-			char_now_next = (char_now_next < 0) ? 0 : char_now_next;
-			while(char_now > char_now_next){
-				char_now--;
-				line_length[line_now] -= 1;
-				input_buf[char_now] = '\0';
-			}
-			break;
-		case '\t':
-		//tab会在其中键入四个\t，这里暂时不考虑在其中换行的情况
-			input_buf[char_now + 3] = input_buf[char_now + 2] = input_buf[char_now + 1] = input_buf[char_now] = ch;
-			char_now += 4;
-			line_length[line_now] += 4;
-			// if((line_now + 1) * 80 < char_now){
-			// 	//下次要写的字符的位置位于下一行
-			// 	line_now++;
-			// 	// line_length[line_now] += 1;
-			// }
-			break;
-		default:
-		//普通字符
-			input_buf[char_now] = ch;
-			char_now++;
-			line_length[line_now] += 1;
-			if((line_now + 1) * 80 < char_now){
-				//下次要写的字符的位置位于下一行
-				line_now++;
+				//防止越界
+				char_now_next_search = (char_now_next_search < 0) ? 0 : char_now_next_search;
+				while(char_now_search > char_now_next_search){
+					char_now_search--;
+					search_buf[char_now_search] = '\0';
+				}
+				break;
+			case '\t':
+			//tab会在其中键入四个\t，这里暂时不考虑在其中换行的情况
+				search_buf[char_now_search + 3] = search_buf[char_now_search + 2] = search_buf[char_now_search + 1] = search_buf[char_now_search] = ch;
+				char_now_search += 4;
+				break;
+			case ESC:
+			//切换输入状态
+					//current_mode = MODE_SEARCH;
+				break;
+			default:
+			//普通字符
+				search_buf[char_now_search] = ch;
+				char_now_search++;
+				break;
 			}
 			break;
 		}
+		
 	
 
 		//out_char(p_tty->p_console, ch);
@@ -279,24 +352,46 @@ PRIVATE void tty_do_handle(TTY* p_tty){
  *======================================================================*/
 PRIVATE void tty_do_write(TTY* p_tty)
 {
-	// if(changed){
-	// 	for (int i = 0; i < 80 * 25 * 2; ++i){
-	// 		out_char(p_tty->p_console, '\b');
-	// 	}
-	// 	for(int i = 0; i < char_now; i++){
-	// 		out_char(p_tty->p_console, input_buf[i]);
-	// 	}
-	// 	changed = 0;
-	// }
-	if(char_console > char_now){
-		char_console--;
-		out_char(p_tty->p_console, '\b');
-	}else if(char_console < char_now){
-		while(char_console < char_now){
-			out_char(p_tty->p_console, input_buf[char_console]);
-			char_console++;
+	switch (current_mode){
+	case MODE_INPUT:
+	//这里需要保证每次只能前进或者后退
+		if(char_console > char_now){
+			char_console--;
+			out_char(p_tty->p_console, '\b');
+		}else if(char_console < char_now){
+			while(char_console < char_now){
+				out_char(p_tty->p_console, input_buf[char_console]);
+				char_console++;
+			}
 		}
+		break;
+	case MODE_SEARCH:
+		if(char_console > char_now + char_now_search){
+			char_console--;
+			out_char(p_tty->p_console, '\b');
+		}else if(char_console < char_now + char_now_search){
+			while(char_console < char_now + char_now_search){
+				out_char_color(p_tty->p_console, search_buf[char_console - char_now], RED_CHAR_COLOR);
+				char_console++;
+			}
+		}
+		break;
+	case MODE_SHOW:
+		show_match_str(p_tty);
+		current_mode = MODE_SHOWED;
+		break;
+	case MODE_SHOWED:
+	//只能等待esc
+		break;
+	case MODE_UNSHOW:
+		set_str_color(p_tty->p_console, 0, char_now, DEFAULT_CHAR_COLOR);
+		clear_tty_search(p_tty);
+		current_mode = MODE_INPUT;
+		break;
+	default:
+		break;
 	}
+
 
 }
 
@@ -307,8 +402,8 @@ PRIVATE void tty_do_write(TTY* p_tty)
 PRIVATE void clear_tty(TTY* p_tty){
 	char_now = 0;
 	line_now = 0;
-	changed = 1;
 	char_console = 0;
+	clear_tty_search(p_tty);
 	for (int i = 0; i < 80 * 25 * 2; ++i)
 	{
 		out_char(p_tty->p_console, '\b');
@@ -318,8 +413,55 @@ PRIVATE void clear_tty(TTY* p_tty){
 	}
 	for(int i = 0; i < 80 * 25; i++){
 		input_buf[i] = '\0';
+	}
+}
+
+PRIVATE void clear_tty_search(TTY* p_tty){
+	char_now_search = 0;
+	for(int i = 0; i < 80 * 25; i++){
 		search_buf[i] = '\0';
 	}
 }
+
+PRIVATE int str_match(char* s1, char* s2){
+	while(*s2 != '\0'){
+		if(*s1 != *s2){
+			return 0;
+		}
+		s1++;
+		s2++;
+	}
+	return 1;
+}
+
+PRIVATE void show_match_str(TTY* p_tty){
+	char* ptr = input_buf;
+	char* now = ptr;
+	char* ptr_search_str;
+	while(now != ptr + char_now){
+		if(str_match(now, search_buf)){
+			set_str_color(p_tty->p_console, now - ptr, str_size(search_buf), RED_CHAR_COLOR);
+			now += str_size(search_buf);
+
+		}else{
+			//out_char(p_tty->p_console, *now);
+			now++;
+		}
+	}
+}
+
+PRIVATE void unshow_match_str(TTY* ptty){
+
+}
+
+PRIVATE int str_size(char* ptr){
+	int result = 0;
+	while(*ptr != '\0'){
+		ptr++;
+		result++;
+	}
+	return result;
+}
+
 
 
