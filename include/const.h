@@ -31,7 +31,7 @@
 #define BRIGHT  0x08    /* 0000 1000 */
 #define MAKE_COLOR(x,y) (x | y) /* MAKE_COLOR(Background,Foreground) */
 
-/* GDT 和 IDT 中描述符的个数 */
+/* GDT �? IDT 中描述符的个�? */
 #define	GDT_SIZE	128
 #define	IDT_SIZE	256
 
@@ -45,7 +45,7 @@
 #define	RPL_USER	SA_RPL3
 
 /* TTY */
-#define NR_CONSOLES	3	/* consoles */
+#define NR_CONSOLES	1	/* consoles */
 
 /* 8259A interrupt controller ports. */
 #define	INT_M_CTL	0x20	/* I/O port for interrupt controller         <Master> */

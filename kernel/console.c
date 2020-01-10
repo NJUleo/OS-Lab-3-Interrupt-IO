@@ -66,11 +66,18 @@ PUBLIC int is_current_console(CONSOLE* p_con)
 	return (p_con == &console_table[nr_current_console]);
 }
 
-
 /*======================================================================*
 			   out_char
  *======================================================================*/
-PUBLIC void out_char(CONSOLE* p_con, char ch)
+PUBLIC void out_char(CONSOLE* p_con, char ch){
+	out_char_color(p_con, ch, DEFAULT_CHAR_COLOR);
+}
+
+/*======================================================================*
+			   out_char_color
+			   按照指定得颜色打印字符。对于换行和退后得情况，颜色保持原有颜色
+ *======================================================================*/
+PUBLIC void out_char_color(CONSOLE* p_con, char ch, int color)
 {
 	u8* p_vmem = (u8*)(V_MEM_BASE + p_con->cursor * 2);
 
@@ -97,7 +104,7 @@ PUBLIC void out_char(CONSOLE* p_con, char ch)
 		if (p_con->cursor <
 		    p_con->original_addr + p_con->v_mem_limit - 1) {
 			*p_vmem++ = ch;
-			*p_vmem++ = DEFAULT_CHAR_COLOR;
+			*p_vmem++ = color;
 			p_con->cursor++;
 		}
 		break;

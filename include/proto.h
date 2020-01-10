@@ -43,9 +43,10 @@ PUBLIC void in_process(TTY* p_tty, u32 key);
 
 /* console.c */
 PUBLIC void out_char(CONSOLE* p_con, char ch);
+PUBLIC void out_char_color(CONSOLE* p_con, char ch, int color);
 PUBLIC void scroll_screen(CONSOLE* p_con, int direction);
 
-/* 以下是系统调用相关 */
+/* 以下是系统调用相�? */
 
 /* proc.c */
 PUBLIC  int     sys_get_ticks();        /* sys_call */
