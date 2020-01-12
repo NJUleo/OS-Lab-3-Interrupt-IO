@@ -24,5 +24,27 @@ typedef struct s_tty
 	struct s_console *	p_console;
 }TTY;
 
+//一条命令
+typedef struct s_command{
+	//这条命令的字符，可能是普通字符、\t、\b
+	char input;
+	//如果是删除命令，需要记录删除的字符，同样可能是普通字符、\t、\b
+	char delete_char;
+}COMMAND;
+
+//指令队列
+typedef struct s_command_queue{
+	COMMAND commands[100];
+	COMMAND* front;//指向第一个命令
+	COMMAND* end;//指向下一个命令的位置
+	int size;//目前拥有的命令个数
+}COMMAND_QUEUE;
+
+//入队
+PRIVATE void command_enqueue(COMMAND_QUEUE* ptr_queue, COMMAND* ptr_command);
+//出队
+PRIVATE COMMAND* command_dequeue(COMMAND_QUEUE* ptr_queue);
+//new一个command，加入队列中
+PRIVATE COMMAND* new_command(COMMAND_QUEUE* queue, char input, char delete_char);
 
 #endif /* _ORANGES_TTY_H_ */

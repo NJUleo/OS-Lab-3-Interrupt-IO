@@ -25,7 +25,7 @@
 #define MODE_UNSHOW 3
 
 
-#define AUTO_CLEAR_TTY
+//#define AUTO_CLEAR_TTY
 
 PRIVATE void init_tty(TTY* p_tty);
 PRIVATE void tty_do_read(TTY* p_tty);
@@ -37,6 +37,7 @@ PRIVATE void clear_tty_search(TTY* p_tty);
 PRIVATE int str_match(char* s1, char* s2);
 PRIVATE void show_match_str(TTY* p_tty);
 PRIVATE int str_size(char* str);
+PRIVATE void unshow_match_str(TTY* p_tty);
 
 
 //输入的和要搜索匹配的字符全部放置在这个文件当中。按道理说应该是每个终端单独存放对应的状态和缓冲，基本就是面向对象的思想，这里做个简化，既然不要求多终端就写再这个文件当中就可以了
@@ -61,6 +62,8 @@ PRIVATE int changed;
 //console中改变了的。
 PRIVATE int char_console;
 
+//存放command
+PRIVATE COMMAND_QUEUE commands;
 
 
 /*======================================================================*
@@ -81,6 +84,13 @@ PUBLIC void task_tty()
 	current_mode = MODE_INPUT;
 	// 开始计时
 	int time_counter = get_ticks();
+	//初始化所有的command
+	for(int i = 0; i < 100; i++){
+		commands.commands[i].input = '\0';
+		commands.commands[i].delete_char = '\0';
+	}
+	commands.size = 0;
+	commands.
 
 
 	while (1) {
@@ -128,6 +138,15 @@ PUBLIC void in_process(TTY* p_tty, u32 key)
         char output[2] = {'\0', '\0'};
 
         if (!(key & FLAG_EXT)) {
+			if((key & FLAG_CTRL_L) && ((key & 0xFF) == 'z')){
+				//ctrl + z
+				if(current_mode == MODE_INPUT){
+					//只在input状态下有撤销功能
+					put_key(p_tty, 'c');
+				}
+				return;
+			}
+			
 		put_key(p_tty, key);
         }
         else {
@@ -212,7 +231,7 @@ PRIVATE void tty_do_read(TTY* p_tty)
 
 /*======================================================================*
 			      tty_do_handle
-				  从tty缓存中读取字符，按照真正得状况存储进input_buf中
+				  从tty缓存中读取字符，封装为命令结构，方便之后逆转，按照真正得状况存储进input_buf中
  *======================================================================*/
 PRIVATE void tty_do_handle(TTY* p_tty){
 	if (p_tty->inbuf_count) {
@@ -238,8 +257,6 @@ PRIVATE void tty_do_handle(TTY* p_tty){
 				break;
 			case '\b':
 				//如果要更换行，则删除到上一行的结束位置。如果是\t,删除四个
-
-
 				if(line_now * 80 == char_now){
 					//下一个要写的字符恰好是当前行的第一个字符，说明向上一行
 					line_now--;
@@ -384,8 +401,7 @@ PRIVATE void tty_do_write(TTY* p_tty)
 	//只能等待esc
 		break;
 	case MODE_UNSHOW:
-		set_str_color(p_tty->p_console, 0, char_now, DEFAULT_CHAR_COLOR);
-		clear_tty_search(p_tty);
+		unshow_match_str(p_tty);
 		current_mode = MODE_INPUT;
 		break;
 	default:
@@ -450,8 +466,9 @@ PRIVATE void show_match_str(TTY* p_tty){
 	}
 }
 
-PRIVATE void unshow_match_str(TTY* ptty){
-
+PRIVATE void unshow_match_str(TTY* p_tty){
+		set_str_color(p_tty->p_console, 0, char_now, DEFAULT_CHAR_COLOR);
+		clear_tty_search(p_tty);
 }
 
 PRIVATE int str_size(char* ptr){
@@ -463,5 +480,37 @@ PRIVATE int str_size(char* ptr){
 	return result;
 }
 
+//入队
+PRIVATE void command_enqueue(COMMAND_QUEUE* queue, COMMAND* command){
+	//其实不需要这个函数，所有的添加都在new_command()进行
+}
+//出队
+PRIVATE COMMAND* command_dequeue(COMMAND_QUEUE* queue){
+	if(queue->size == 0){
+		return 0;
+	}
+	COMMAND* result = queue->front;
+	queue->front++;
+	if(queue->front - queue->commands == 100){
+		queue->front = queue->commands;
+	}
+	return result;
 
+
+}
+
+//new一个command，加入队列中，实际上是把队尾的command修改
+PRIVATE COMMAND* new_command(COMMAND_QUEUE* queue, char input, char delete_char){
+	if(queue->size == 100){
+		return;
+	}
+	COMMAND* command = queue->end;
+	command->delete_char = delete_char;
+	command->input = input;
+	queue->end++;
+	if(queue->end - queue->commands == 100){
+		queue->end = queue->commands;
+	}
+
+}
 
