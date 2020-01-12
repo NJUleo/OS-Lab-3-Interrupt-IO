@@ -441,7 +441,7 @@ PRIVATE void show_match_str(TTY* p_tty){
 	while(now != ptr + char_now){
 		if(str_match(now, search_buf)){
 			set_str_color(p_tty->p_console, now - ptr, str_size(search_buf), RED_CHAR_COLOR);
-			now += str_size(search_buf);
+			now += 1;
 
 		}else{
 			//out_char(p_tty->p_console, *now);
