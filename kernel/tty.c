@@ -476,6 +476,7 @@ PRIVATE void buf2command(TTY* p_tty, char ch){
 PRIVATE void do_command(TTY* p_tty, COMMAND* cmd){
 	char ch = cmd->input_char;
 	int char_now_next = 0;
+	cmd->delete_char = '\b';
 	switch(ch){
 		case '\n':
 			line_now++;
@@ -493,6 +494,7 @@ PRIVATE void do_command(TTY* p_tty, COMMAND* cmd){
 				if(line_length[line_now] == 80){
 					//上一行是满的
 					char_now--;
+					line_length[line_now]--;
 					cmd->delete_char = input_buf[char_now];//被删除的字符存入cmd
 					input_buf[char_now] = '\0';
 				}
@@ -537,7 +539,7 @@ PRIVATE void do_command(TTY* p_tty, COMMAND* cmd){
 			input_buf[char_now] = ch;
 			char_now++;
 			line_length[line_now] += 1;
-			if((line_now + 1) * 80 < char_now){
+			if((line_now + 1) * 80 == char_now){
 				//下次要写的字符的位置位于下一行
 				line_now++;
 			}
