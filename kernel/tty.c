@@ -38,6 +38,12 @@ PRIVATE int str_match(char* s1, char* s2);
 PRIVATE void show_match_str(TTY* p_tty);
 PRIVATE int str_size(char* str);
 PRIVATE void unshow_match_str(TTY* p_tty);
+//从缓存转换到command
+PRIVATE void buf2command(TTY* p_tty, char ch);
+//从command队列中执行
+PRIVATE void do_command(TTY* p_tty, COMMAND* cmd);
+//撤销
+PRIVATE void undo(TTY* p_tty);
 
 
 //输入的和要搜索匹配的字符全部放置在这个文件当中。按道理说应该是每个终端单独存放对应的状态和缓冲，基本就是面向对象的思想，这里做个简化，既然不要求多终端就写再这个文件当中就可以了
@@ -57,8 +63,6 @@ PRIVATE int char_now_search;
 PRIVATE int line_length[25];
 //当前正在写的行
 PRIVATE int line_now;
-//发生改变
-PRIVATE int changed;
 //console中改变了的。
 PRIVATE int char_console;
 
@@ -90,7 +94,7 @@ PUBLIC void task_tty()
 		commands.commands[i].delete_char = '\0';
 	}
 	commands.size = 0;
-	commands.
+	commands.end = commands.commands;
 
 
 	while (1) {
@@ -235,7 +239,6 @@ PRIVATE void tty_do_read(TTY* p_tty)
  *======================================================================*/
 PRIVATE void tty_do_handle(TTY* p_tty){
 	if (p_tty->inbuf_count) {
-		changed = 1;
 		char ch = *(p_tty->p_inbuf_tail);
 		p_tty->p_inbuf_tail++;
 		if (p_tty->p_inbuf_tail == p_tty->in_buf + TTY_IN_BYTES) {
@@ -243,75 +246,21 @@ PRIVATE void tty_do_handle(TTY* p_tty){
 		}
 		p_tty->inbuf_count--;
 
-		//下一此应该写的位置,用于baspace
-		int char_now_next = 0;
+		//下一此应该写的位置,用于backspace
+
 		int char_now_next_search = 0;
+		COMMAND* cmd;
 
 
 		switch(current_mode){
 		case MODE_INPUT:
-			switch(ch){
-			case '\n':
-				line_now++;
-				char_now = line_now * 80;
-				break;
-			case '\b':
-				//如果要更换行，则删除到上一行的结束位置。如果是\t,删除四个
-				if(line_now * 80 == char_now){
-					//下一个要写的字符恰好是当前行的第一个字符，说明向上一行
-					line_now--;
-					line_now = (line_now < 0) ? 0 : line_now;
-					char_now = line_now * 80 + line_length[line_now];
-					if(line_length[line_now] == 80){
-						//上一行是满的
-						char_now--;
-						input_buf[char_now] = '\0';
-					}
-					break;
-				}else if(input_buf[char_now - 1] == '\t'){
-					//tab
-					char_now_next = char_now - 4;
-				}else{
-					//普通字符且不需要换行
-					char_now_next = char_now - 1;
-				}
-
-				//防止越界
-				char_now_next = (char_now_next < 0) ? 0 : char_now_next;
-				while(char_now > char_now_next){
-					char_now--;
-					line_length[line_now] -= 1;
-					input_buf[char_now] = '\0';
-				}
-				break;
-			case '\t':
-			//tab会在其中键入四个\t，这里暂时不考虑在其中换行的情况
-				input_buf[char_now + 3] = input_buf[char_now + 2] = input_buf[char_now + 1] = input_buf[char_now] = ch;
-				char_now += 4;
-				line_length[line_now] += 4;
-				// if((line_now + 1) * 80 < char_now){
-				// 	//下次要写的字符的位置位于下一行
-				// 	line_now++;
-				// 	// line_length[line_now] += 1;
-				// }
-				break;
-			case 27:
-			//切换输入状态
-				out_char(p_tty->p_console, 'B');
-				current_mode = MODE_SEARCH;
-				break;
-			default:
-			//普通字符
-				input_buf[char_now] = ch;
-				char_now++;
-				line_length[line_now] += 1;
-				if((line_now + 1) * 80 < char_now){
-					//下次要写的字符的位置位于下一行
-					line_now++;
-				}
-				break;
-			}
+			//创建一个新的command
+			new_command(&commands, ch, '\0');
+			//执行下一个command
+			cmd = get_now_command(&commands);
+			do_command(p_tty, cmd);
 			break;
+
 		case MODE_SHOW:
 			//除非esc否则不会发生改变
 			break;
@@ -484,16 +433,17 @@ PRIVATE int str_size(char* ptr){
 PRIVATE void command_enqueue(COMMAND_QUEUE* queue, COMMAND* command){
 	//其实不需要这个函数，所有的添加都在new_command()进行
 }
-//出队
-PRIVATE COMMAND* command_dequeue(COMMAND_QUEUE* queue){
+//获得当前的command
+PRIVATE COMMAND* get_now_command(COMMAND_QUEUE* queue){
 	if(queue->size == 0){
 		return 0;
 	}
-	COMMAND* result = queue->front;
-	queue->front++;
-	if(queue->front - queue->commands == 100){
-		queue->front = queue->commands;
+	COMMAND* result = queue->end;
+	if(queue->end == queue->commands){
+		result = queue->commands + 100;
 	}
+	result--;
+
 	return result;
 
 
@@ -510,7 +460,88 @@ PRIVATE COMMAND* new_command(COMMAND_QUEUE* queue, char input, char delete_char)
 	queue->end++;
 	if(queue->end - queue->commands == 100){
 		queue->end = queue->commands;
+		
 	}
+	queue->size++;
+
+}
+
+//从缓存转换到command
+PRIVATE void buf2command(TTY* p_tty, char ch){
+	new_command(&commands, ch, '\0');
+}
+//执行这个command，同时设置它的deletechar，如果是删除的话
+PRIVATE void do_command(TTY* p_tty, COMMAND* cmd){
+	char ch = cmd->input;
+	int char_now_next = 0;
+	switch(ch){
+		case '\n':
+			line_now++;
+			char_now = line_now * 80;
+			break;
+		case '\b':
+			//如果要更换行，则删除到上一行的结束位置。如果是\t,删除四个
+			if(line_now * 80 == char_now){
+				//下一个要写的字符恰好是当前行的第一个字符，说明向上一行
+				cmd->delete_char = '\n';
+				line_now--;
+				line_now = (line_now < 0) ? 0 : line_now;
+				char_now = line_now * 80 + line_length[line_now];
+				if(line_length[line_now] == 80){
+					//上一行是满的
+					char_now--;
+					cmd->delete_char = input_buf[char_now];//被删除的字符存入cmd
+					input_buf[char_now] = '\0';
+				}
+				break;
+			}else if(input_buf[char_now - 1] == '\t'){
+				//tab
+				char_now_next = char_now - 4;
+				cmd->delete_char = '\t';
+			}else{
+				//普通字符且不需要换行
+				char_now_next = char_now - 1;
+				cmd->delete_char = input_buf[char_now_next];
+			}
+
+			//防止越界
+			char_now_next = (char_now_next < 0) ? 0 : char_now_next;
+			while(char_now > char_now_next){
+				char_now--;
+				line_length[line_now] -= 1;
+				input_buf[char_now] = '\0';
+			}
+			break;
+		case '\t':
+		//tab会在其中键入四个\t，这里暂时不考虑在其中换行的情况
+			input_buf[char_now + 3] = input_buf[char_now + 2] = input_buf[char_now + 1] = input_buf[char_now] = ch;
+			char_now += 4;
+			line_length[line_now] += 4;
+			// if((line_now + 1) * 80 < char_now){
+			// 	//下次要写的字符的位置位于下一行
+			// 	line_now++;
+			// 	// line_length[line_now] += 1;
+			// }
+			break;
+		case 27://ESC
+		//切换输入状态
+			out_char(p_tty->p_console, 'B');
+			current_mode = MODE_SEARCH;
+			break;
+		default:
+		//普通字符
+			input_buf[char_now] = ch;
+			char_now++;
+			line_length[line_now] += 1;
+			if((line_now + 1) * 80 < char_now){
+				//下次要写的字符的位置位于下一行
+				line_now++;
+			}
+			break;
+		}
+}
+//撤销
+PRIVATE void undo(TTY* p_tty){
 
 }
 
