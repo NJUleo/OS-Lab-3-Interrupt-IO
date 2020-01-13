@@ -25,7 +25,7 @@
 #define MODE_UNSHOW 3
 
 
-//#define AUTO_CLEAR_TTY
+#define AUTO_CLEAR_TTY
 
 PRIVATE void init_tty(TTY* p_tty);
 PRIVATE void tty_do_read(TTY* p_tty);
@@ -99,9 +99,7 @@ PUBLIC void task_tty()
 
 	while (1) {
 		for (p_tty=TTY_FIRST;p_tty<TTY_END;p_tty++) {
-			// 处在输入模式并且超过20s则清屏（输出\b来清屏……）
-			// 不知道原作者怎么计算这个ms的，1s难道不是1000ms？
-			// @See [[kernal/clock.c]]
+			//超过20s则清屏
 #ifdef AUTO_CLEAR_TTY
 			int current_time = get_ticks();
 			if (current_mode == MODE_INPUT &&
