@@ -90,7 +90,7 @@ PUBLIC void task_tty()
 	int time_counter = get_ticks();
 	//初始化所有的command
 	for(int i = 0; i < 100; i++){
-		commands.commands[i].input = '\0';
+		commands.commands[i].input_char = '\0';
 		commands.commands[i].delete_char = '\0';
 	}
 	commands.size = 0;
@@ -146,7 +146,8 @@ PUBLIC void in_process(TTY* p_tty, u32 key)
 				//ctrl + z
 				if(current_mode == MODE_INPUT){
 					//只在input状态下有撤销功能
-					put_key(p_tty, 'c');
+					//ut_key(p_tty, 'c');
+					undo(p_tty);
 				}
 				return;
 			}
@@ -451,18 +452,19 @@ PRIVATE COMMAND* get_now_command(COMMAND_QUEUE* queue){
 
 //new一个command，加入队列中，实际上是把队尾的command修改
 PRIVATE COMMAND* new_command(COMMAND_QUEUE* queue, char input, char delete_char){
-	if(queue->size == 100){
-		return;
-	}
+	// if(queue->size == 100){
+	// 	return;
+	// }
 	COMMAND* command = queue->end;
 	command->delete_char = delete_char;
-	command->input = input;
+	command->input_char = input;
 	queue->end++;
 	if(queue->end - queue->commands == 100){
 		queue->end = queue->commands;
 		
 	}
 	queue->size++;
+	queue->size = (queue->size > 100)? 100 : queue->size;
 
 }
 
@@ -472,12 +474,13 @@ PRIVATE void buf2command(TTY* p_tty, char ch){
 }
 //执行这个command，同时设置它的deletechar，如果是删除的话
 PRIVATE void do_command(TTY* p_tty, COMMAND* cmd){
-	char ch = cmd->input;
+	char ch = cmd->input_char;
 	int char_now_next = 0;
 	switch(ch){
 		case '\n':
 			line_now++;
 			char_now = line_now * 80;
+			cmd->delete_char = '\b';
 			break;
 		case '\b':
 			//如果要更换行，则删除到上一行的结束位置。如果是\t,删除四个
@@ -517,6 +520,7 @@ PRIVATE void do_command(TTY* p_tty, COMMAND* cmd){
 			input_buf[char_now + 3] = input_buf[char_now + 2] = input_buf[char_now + 1] = input_buf[char_now] = ch;
 			char_now += 4;
 			line_length[line_now] += 4;
+			cmd->delete_char = '\b';
 			// if((line_now + 1) * 80 < char_now){
 			// 	//下次要写的字符的位置位于下一行
 			// 	line_now++;
@@ -525,7 +529,7 @@ PRIVATE void do_command(TTY* p_tty, COMMAND* cmd){
 			break;
 		case 27://ESC
 		//切换输入状态
-			out_char(p_tty->p_console, 'B');
+			//out_char(p_tty->p_console, 'B');
 			current_mode = MODE_SEARCH;
 			break;
 		default:
@@ -537,11 +541,26 @@ PRIVATE void do_command(TTY* p_tty, COMMAND* cmd){
 				//下次要写的字符的位置位于下一行
 				line_now++;
 			}
+			cmd->delete_char = '\b';
 			break;
 		}
 }
 //撤销
 PRIVATE void undo(TTY* p_tty){
-
+	if(commands.size == 0){
+		//没有可以撤销的指令
+		return;
+	}
+	commands.size--;
+	if(commands.end == commands.commands){
+		commands.end = commands.commands + 100;
+	}
+	commands.end--;
+	//将这个指令反过来，重新执行
+	COMMAND* cmd = commands.end;
+	char temp = cmd->delete_char;
+	cmd->delete_char = cmd->input_char;
+	cmd->input_char = temp;
+	do_command(p_tty, cmd);
 }
 

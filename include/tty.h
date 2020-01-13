@@ -27,8 +27,8 @@ typedef struct s_tty
 //一条命令
 typedef struct s_command{
 	//这条命令的字符，可能是普通字符、\t、\b
-	char input;
-	//如果是删除命令，需要记录删除的字符，同样可能是普通字符、\t、\b
+	char input_char;
+	//如果是删除命令，需要记录删除的字符，可能是普通字符、\t
 	char delete_char;
 }COMMAND;
 
